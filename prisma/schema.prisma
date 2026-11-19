@@ -1,0 +1,225 @@
+// AnyBook data model — follows the handoff README's "State / data model" section.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookStatus {
+  Published
+  Draft
+}
+
+enum CollectionStatus {
+  Live
+  Hidden
+}
+
+enum OrderStatus {
+  Processing
+  Shipped
+  Delivered
+  Cancelled
+}
+
+enum Role {
+  Customer
+  Staff
+  Admin
+}
+
+enum UserStatus {
+  Active
+  Blocked
+}
+
+enum PromoType {
+  pct
+  abs
+}
+
+enum ReviewStatus {
+  Pending
+  Published
+  Hidden
+}
+
+enum Condition {
+  new
+  vg
+  good
+}
+
+model Book {
+  id            String     @id @default(cuid())
+  title         String
+  author        String
+  category      String
+  isbn          String     @default("")
+  year          Int
+  pages         Int        @default(0)
+  description   String     @default("")
+  priceNew      Int
+  priceVG       Int
+  priceGood     Int
+  stockNew      Int        @default(0)
+  stockVG       Int        @default(0)
+  stockGood     Int        @default(0)
+  coverImageUrl String?
+  coverTone     Int        @default(0)
+  status        BookStatus @default(Published)
+  rating        Float      @default(0)
+  reviewCount   Int        @default(0)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  collections CollectionBook[]
+  reviews     Review[]
+  orderLines  OrderLine[]
+
+  @@index([status, category])
+  @@index([author])
+}
+
+model Collection {
+  id          String           @id @default(cuid())
+  name        String
+  description String           @default("")
+  status      CollectionStatus @default(Hidden)
+  showOnHome  Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  books       CollectionBook[]
+}
+
+model CollectionBook {
+  collectionId String
+  bookId       String
+  position     Int        @default(0)
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  book         Book       @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, bookId])
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String?
+  phone        String     @default("")
+  street       String     @default("")
+  city         String     @default("Cairo")
+  zip          String     @default("")
+  role         Role       @default(Customer)
+  status       UserStatus @default(Active)
+  createdAt    DateTime   @default(now())
+
+  sessions Session[]
+  orders   Order[]
+  reviews  Review[]
+}
+
+model Session {
+  id        String   @id // sha256 of the cookie token
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  no            String      @unique
+  createdAt     DateTime    @default(now())
+  userId        String?
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  customerName  String
+  customerEmail String
+  phone         String
+  street        String
+  city          String
+  zip           String
+  shipMethod    String // std | exp
+  payment       String // card | cod | wallet
+  subtotal      Int
+  discount      Int         @default(0)
+  shipping      Int
+  total         Int
+  promoCode     String?
+  status        OrderStatus @default(Processing)
+  lines         OrderLine[]
+
+  @@index([createdAt])
+  @@index([status])
+}
+
+model OrderLine {
+  id      String    @id @default(cuid())
+  orderId String
+  bookId  String?
+  title   String // snapshot, survives product deletion
+  author  String
+  cond    Condition
+  qty     Int
+  unit    Int
+  order   Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  book    Book?     @relation(fields: [bookId], references: [id], onDelete: SetNull)
+}
+
+model PromoCode {
+  code      String    @id
+  type      PromoType
+  value     Int
+  uses      Int       @default(0)
+  active    Boolean   @default(true)
+  createdAt DateTime  @default(now())
+}
+
+model Review {
+  id        String       @id @default(cuid())
+  bookId    String
+  userId    String?
+  author    String
+  stars     Int
+  text      String
+  copy      String       @default("Verified purchase")
+  status    ReviewStatus @default(Pending)
+  createdAt DateTime     @default(now())
+  book      Book         @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user      User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([bookId, status])
+}
+
+model Settings {
+  id        Int     @id @default(1)
+  storeName String  @default("AnyBook")
+  email     String  @default("hello@anybook.eg")
+  phone     String  @default("+20 2 2735 0000")
+  address   String  @default("26 July St., Zamalek, Cairo")
+  std       Int     @default(60)
+  exp       Int     @default(120)
+  freeOver  Int     @default(1000)
+  lowAt     Int     @default(3)
+  payCard   Boolean @default(true)
+  payCod    Boolean @default(true)
+  payWallet Boolean @default(true)
+}
+
+model Subscriber {
+  email     String   @id
+  createdAt DateTime @default(now())
+}
+
+model Upload {
+  id        String   @id @default(cuid())
+  mime      String
+  data      Bytes
+  createdAt DateTime @default(now())
+}
